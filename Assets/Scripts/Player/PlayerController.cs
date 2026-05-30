@@ -43,12 +43,15 @@ namespace DeepSea.Player
             rb = GetComponent<Rigidbody>();
             inputProvider = GetComponent<IInputProvider>();
 
-            // Setup Rigidbody for top-down constraints.
-            // Rigidbody shouldn't be affected by engine gravity since we manually simulate floating/sinking.
+            // 탑뷰 물리 제약을 위한 리지드바디 조율
+            // 플레이어가 직접 떠오르고 가라앉는 호흡을 모사하므로 기본 중력은 끕니다.
             rb.useGravity = false;
-            rb.linearDamping = 1.0f; // Soft natural stopping drag
-            rb.angularDamping = 999f; // Prevent unwanted rotation spin
+            rb.linearDamping = 1.0f; // 부드럽고 자연스럽게 감속되는 저항
+            rb.angularDamping = 999f; // 불필요한 스핀 현상 방지
             rb.constraints = RigidbodyConstraints.FreezeRotation;
+
+            // 시니어 팁: 리지드바디 이동의 뚝뚝 끊김(Jitter) 떨림을 제거하기 위한 보간 처리 활성화
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
         private void Start()
@@ -114,15 +117,16 @@ namespace DeepSea.Player
             // Apply velocity
             rb.linearVelocity = targetVelocity;
 
-            // 4. Enforce strict depth boundaries (Z = 0 is surface, Z = maxDepthLimit is deepest)
-            Vector3 currentPos = transform.position;
+            // 4. 엄격한 수심 경계 제어 (Z = 0 해수면, Z = maxDepthLimit 최대 수심)
+            // 시니어 팁: FixedUpdate 내에서 transform.position을 직접 덮어쓰면 물리 보간이 깨져 뚝뚝 끊기므로 rb.position을 세팅합니다.
+            Vector3 currentPos = rb.position;
             if (currentPos.z > 0f)
             {
                 currentPos.z = 0f;
-                transform.position = currentPos;
+                rb.position = currentPos;
                 if (rb.linearVelocity.z > 0f)
                 {
-                    // Stop upward velocity when hitting the surface
+                    // 수면에 닿으면 상승 물리 속도를 0으로 제한
                     Vector3 vel = rb.linearVelocity;
                     vel.z = 0f;
                     rb.linearVelocity = vel;
@@ -131,17 +135,25 @@ namespace DeepSea.Player
             else if (currentPos.z < maxDepthLimit)
             {
                 currentPos.z = maxDepthLimit;
-                transform.position = currentPos;
+                rb.position = currentPos;
                 if (rb.linearVelocity.z < 0f)
                 {
-                    // Stop downward velocity when hitting the bottom limit
+                    // 바닥 제한에 닿으면 하강 물리 속도를 0으로 제한
                     Vector3 vel = rb.linearVelocity;
                     vel.z = 0f;
                     rb.linearVelocity = vel;
                 }
             }
 
-            // Update state metrics
+            // 플레이어가 수평으로 이동 중인 방향을 향해 머리가 바라보도록 회전 처리
+            // 원본 스프라이트의 헤드가 위쪽(Y+)을 향하고 있으므로 angle에서 90도를 빼 각도를 맞춰줍니다.
+            if (moveInput.sqrMagnitude > 0.01f)
+            {
+                float angle = Mathf.Atan2(moveInput.y, moveInput.x) * Mathf.Rad2Deg;
+                transform.rotation = Quaternion.Euler(0f, 180f, angle - 90f);
+            }
+
+            // 상태 지표 갱신
             CurrentSpeed = rb.linearVelocity.magnitude;
             IsMoving = moveInput.sqrMagnitude > 0.01f || Mathf.Abs(depthInput) > 0.01f;
         }

@@ -67,6 +67,14 @@ namespace DeepSea.Environment
                 RenderSettings.fog = true;
                 RenderSettings.fogMode = FogMode.ExponentialSquared;
             }
+
+            // 시니어 팁: OnEnable 시점 싱글톤 null 레이스 컨디션 방어를 위해 여기서 재구독 및 초기 상태 동기화를 진행합니다.
+            if (DepthManager.Instance != null)
+            {
+                DepthManager.Instance.OnDepthChanged -= OnPlayerDepthChanged;
+                DepthManager.Instance.OnDepthChanged += OnPlayerDepthChanged;
+                OnPlayerDepthChanged(DepthManager.Instance.CurrentDepth);
+            }
         }
 
         private void OnPlayerDepthChanged(float depth)
